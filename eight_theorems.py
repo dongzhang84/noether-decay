@@ -6,9 +6,9 @@
 =====================================================================
 八条定理:
  T1 学习=诺特荷强制衰减 (守恒 vs 衰减)
- T2 各向同性摩擦下衰减率=mu/m, 与任务无关 (否定定理)
+ T2 各向同性 weight decay 下衰减率=2mu, 与任务无关 (否定定理)
  T3 学习不可积 (除死方向外无守恒量) —— 用"诺特荷数 vs 自由度"展示
- T4 任务信息只能从各向异性进入 (摩擦各向同性=任务无关, 对比)
+ T4 任务信息只能从各向异性进入 (各向同性 weight decay=任务无关, 对比)
  T5 学习把相空间收缩到低维吸引子
  T6 相空间收缩率 = 诺特荷衰减率之和 = Lyapunov 指数之和
  T7(改) 正交分解: 诺特荷=how(任务无关) ⊥ 乘积奇异谱=what(任务相关)
@@ -17,6 +17,7 @@
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 np.random.seed(0)
 d_in=d_h=d_out=6; N=300; dt=0.01; T=4000
@@ -35,7 +36,7 @@ def grads(W1,W2,Y):
 def Cmat(W1,W2): return W1@W1.T - W2.T@W2
 def q_scalar(W1,W2): return np.sum(W1**2)-np.sum(W2**2)   # 诺特荷的标量代理(迹)
 
-# 通用训练器: mode in {'gd','friction','sgd'} ; aniso=各向异性学习率向量
+# 通用训练器: mode in {'gd','friction','sgd'}（'friction' 实为 weight decay: 加 -μW 位置项, 一阶无惯性, 非速度摩擦）; aniso=各向异性学习率向量
 def run(M, mode='friction', mu=0.3, sigma=0.0, aniso=None, seed=1, T=T):
     W1,W2=W1_0.copy(),W2_0.copy(); Y=M@X; rng=np.random.default_rng(seed)
     rec={'q':[], 'loss':[], 'Cnorm':[], 'prodsv':[], 't':[]}
@@ -63,9 +64,9 @@ r_gd =run(M,mode='gd')
 r_fr =run(M,mode='friction',mu=0.3)
 ax=axes[0,0]
 ax.plot(r_gd['t'],r_gd['q'],lw=2,color='#2ca02c',label='pure GD: Q conserved')
-ax.plot(r_fr['t'],r_fr['q'],lw=2,color='#d62728',label='+friction: Q decays')
+ax.plot(r_fr['t'],r_fr['q'],lw=2,color='#d62728',label='+weight decay: C decays')
 ax.axhline(0,color='gray',ls=':',lw=.8)
-ax.set_title('T1  Learning = forced decay of Noether charge\n(conserved in GD, decays with friction)')
+ax.set_title('T1  Learning = forced decay of Noether charge\n(conserved in GD, decays with weight decay)')
 ax.set_xlabel('t'); ax.set_ylabel('Q = ||W1||^2-||W2||^2'); ax.legend(fontsize=8); ax.grid(alpha=.2)
 
 # ---------- T2: 各向同性衰减率与任务无关 ----------
@@ -73,7 +74,7 @@ ax=axes[0,1]
 for rk,c in zip([1,3,6],['#1f77b4','#ff7f0e','#d62728']):
     r=run(target(rk),mode='friction',mu=0.3)
     q=np.array(r['q']); ax.plot(r['t'],q/q[0],lw=2,color=c,label=f'task rank={rk}')
-ax.set_title('T2  Isotropic-friction decay RATE is task-independent\n(all curves collapse -> rate=mu/m)')
+ax.set_title('T2  Isotropic weight-decay RATE is task-independent\n(all curves collapse -> rate=2mu)')
 ax.set_xlabel('t'); ax.set_ylabel('Q(t)/Q(0)'); ax.legend(fontsize=8); ax.grid(alpha=.2)
 
 # ---------- T3: 学习不可积 (守恒量数目 vs 自由度) ----------
@@ -85,7 +86,7 @@ dof=d_h*d_in+d_out*d_h
 n_conserved=d_h*(d_h+1)//2   # C是对称d_h x d_h, 守恒量上限~21
 ax.bar(['conserved\ncharges\n(dead dirs)','total\ndegrees of\nfreedom'],[n_conserved,dof],
        color=['#2ca02c','#d62728'])
-ax.set_title(f'T3  Learning is non-integrable\nconserved charges ({n_conserved}) << DOF ({dof}) -> no closed solution')
+ax.set_title(f'T3  Learning has no closed-form solution\nconserved charges ({n_conserved}) << DOF ({dof})')
 ax.set_ylabel('count'); ax.grid(alpha=.2,axis='y')
 
 # ---------- T4: 任务信息只能从各向异性进入 ----------
@@ -126,12 +127,12 @@ ax.set_xlabel('index'); ax.set_ylabel('singular value of W2W1'); ax.legend(fonts
 
 plt.suptitle('ONE toy model, eight theorems (two-layer linear net, Noether charge C=W1W1^T - W2^T W2)',fontsize=14)
 plt.tight_layout()
-plt.savefig('/mnt/user-data/outputs/eight_theorems_toymodel.png',dpi=120,bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(os.path.abspath(__file__)),'docs','eight_theorems_toymodel.png'),dpi=120,bbox_inches='tight')
 print("saved combined figure")
 
 # 打印数值小结
 print("\n--- 数值小结 ---")
-print("T1: GD末态Q=%.3f(守恒)  friction末态Q=%.4f(衰减到0)"%(r_gd['q'][-1],r_fr['q'][-1]))
+print("T1: GD末态Q=%.3f(守恒)  weight-decay末态Q=%.4f(衰减到0)"%(r_gd['q'][-1],r_fr['q'][-1]))
 print("T2: 三个任务 Q(t)/Q(0) 曲线重合 -> 衰减率与任务无关")
 print("T3: 守恒荷上限=%d << 总自由度=%d -> 不可积"%(n_conserved,dof))
 print("T4: 各向同性末态||C||=",np.round(iso_norms,4)," (平)")

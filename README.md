@@ -23,7 +23,10 @@ The writeup is deliberate about labeling what is proven, what is illustrative, a
 
 ## Full text
 
-The full writeup (in Chinese) lives in [`docs/`](docs/).
+The Chinese writeup lives in [`docs/`](docs/):
+
+- `诺特衰减学习_Discussion.md` — the authoritative, complete record (**source**).
+- `学习作为诺特荷的衰减——一个耗散系统的视角.md` — a refined public version (**projection** of the source).
 
 ## Status
 
