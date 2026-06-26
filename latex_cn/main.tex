@@ -1,0 +1,311 @@
+% !TEX TS-program = xelatex
+% !TEX encoding = UTF-8 Unicode
+% !BIB TS-program = bibtex
+
+% Notes on Noether Charge Decay in Learning Dynamics — 中文版
+% TeXShop / TeXworks / VSCode-LaTeX-Workshop 会读取上面三行 magic
+% comment 自动选择 XeLaTeX + BibTeX。命令行用户跑 ./build.sh 或
+% latexmk -xelatex main.tex 均可。
+% 中文支持依赖 ctex 包（TeX Live / MacTeX 默认携带）。
+
+\documentclass[11pt]{article}
+
+% --- 中文支持 -------------------------------------------------------------
+% fontset=fandol 用 TeX Live 自带的 Fandol 字体（不依赖任何系统字体），
+% 跨平台稳定。如果想用系统字体（macOS 的 PingFang / Heiti，Windows 的
+% SimSun），改成 fontset=mac 或 fontset=windows。
+\usepackage[UTF8, scheme=plain, fontset=fandol]{ctex}
+
+% --- 数学 / 字体 ---------------------------------------------------------
+\usepackage{amsmath, amssymb, amsfonts, amsthm}
+\usepackage{mathrsfs}
+
+% --- 引用 / 参考文献 -----------------------------------------------------
+% [numbers] = [N] 式数字引用；不加 sort&compress 以保持正文出现顺序。
+% 配合下面的 \bibliographystyle{unsrt}，文献编号 = 正文首次引用顺序。
+\usepackage[numbers]{natbib}
+
+% --- 表格 / 图 -----------------------------------------------------------
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+
+% --- 排版 ----------------------------------------------------------------
+\usepackage[margin=0.9in]{geometry}
+\usepackage{verbatim}
+
+% --- 超链接（最后载入）---------------------------------------------------
+\usepackage[colorlinks=true, citecolor=blue, linkcolor=blue, urlcolor=blue,
+            hypertexnames=false]{hyperref}
+
+% --- 定理环境 ------------------------------------------------------------
+\newtheorem{Theorem}{定理}[section]
+\newtheorem{Definition}[Theorem]{定义}
+\newtheorem{Proposition}[Theorem]{命题}
+\newtheorem{Lemma}[Theorem]{引理}
+\newtheorem{Remark}[Theorem]{备注}
+
+% --- 元数据 --------------------------------------------------------------
+\title{学习动力学中诺特荷的衰减：作为对称破缺的学习}
+\author{张栋\thanks{电子邮件：dongzhanghz@gmail.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% --- 本文自定义记号（放在正文区，不动 preamble）-------------------------
+\newcommand{\Wone}{W_1}
+\newcommand{\Wtwo}{W_2}
+\newcommand{\Cmat}{C}
+\newcommand{\trace}{\operatorname{tr}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+
+% ============ 写作护栏（开工前务必读，写完删掉本注释块）============
+%  护栏1：related work 必须同时引 Du/Arora（balancedness 守恒）、
+%         Kunin 2021 *Neural Mechanics*（weight decay 下 e^{-2μt}，Eq.20/附录G）、
+%         Tanaka–Kunin 2021、Ziyin 2024。明说 delta：本文不重复机制，贡献在解释/分类层。
+%  护栏2：二阶拉格朗日/质量 m/动量荷 Q_N/平衡律 → 放进附录 A，不进正文骨架。
+%  护栏3：保持成熟度标注（严格 / 示意 / 展望），逐条标。
+% ==================================================================
+
+\begin{abstract}
+\noindent
+% TODO：定稿前再压一遍。当前是诚实定位版。
+我们把深度网络的训练视为一个\textbf{耗散动力系统}，并研究重缩放对称对应的诺特荷
+$\Cmat = \Wone\Wone^\top - \Wtwo^\top\Wtwo$ 在学习过程中的行为。纯梯度流下 $\Cmat$ 守恒
+（Du--Arora balancedness）；加入权重衰减（weight decay）打破对称后，$\Cmat$ 以
+$\dot\Cmat=-2\mu\Cmat$ 指数衰减。这条机制本身已见于既有工作（尤其 Kunin 等的
+\emph{Neural Mechanics}），\textbf{本文不以它为贡献}。本文的论点在其上一层：
+\emph{守恒的方向恰恰是学习的盲区——一个方向上诺特荷守恒，意味着那个方向学不到任何东西。}
+我们给出两条相互印证的结论：(i)~各向同性、恒定 weight decay 下衰减率只由正则强度决定、
+\textbf{与任务无关}（一条否定结论），因此“衰减率”这个观测量本身不携带学习信息；
+(ii)~诺特荷度量的是网络的\emph{内部组织方式}（how），它与\emph{所学任务}（what，
+即乘积 $\Wtwo\Wone$ 的奇异谱）\textbf{正交}——这一点由一个否定实验立起（“用诺特荷区分任务”失败，
+而失败方式恰好证明了正交性）。由此我们把学习刻画为相空间向低维吸引子的收缩，并提炼两个
+有望从理想情形推广到现实 SGD 的不变量：\textbf{对称破缺数}（整数）与\textbf{吸引子维数}。
+全文用一个两层线性网 toy model 逐条数值验证，并诚实标注哪些严格成立、哪些示意、哪些为展望。
+\end{abstract}
+
+% \tableofcontents
+
+% ========================================================================
+\section{引言}\label{sec:intro}
+% ========================================================================
+% 目的：立论点 + 守恒=盲区的反转 + 护栏1（边界）。
+% 要点：一句话论点（学习=重缩放对称的强制破缺）；核心反转（守恒=没在学）；
+%       与已有工作边界（护栏1）；路线图（三档理想化，主战场档二）。
+
+学习里真正稳定的守恒结构来自网络的重参数化冗余。\textbf{TODO：正文。}
+
+\paragraph{与已有工作的边界（关键）。}
+% 护栏1。这一段写了，全文免疫“这不是 Kunin 吗”。
+裸衰减式 $\Cmat(t)=\Cmat(0)e^{-2\mu t}$ 与 balancedness 守恒并非本文新结果：
+前者见 Kunin 等的 \emph{Neural Mechanics}~\citep{kunin2021neural}（其将对称破缺当作追踪
+SGD 轨迹的测量工具），后者见 Du 等~\citep{du2018algorithmic} 与 Arora 等~\citep{arora2018optimization}。
+相关的还有 Tanaka--Kunin 的诺特学习动力学~\citep{tanaka2021noether} 与 Ziyin 等的噪声平衡~\citep{ziyin2024parameter}。
+\textbf{本文不重复这一机制}；贡献在其上的解释与分类层——守恒即学习盲区、how$\perp$what、
+以及“衰减率不携带学习信息故转向离散不变量”。\textbf{TODO：补足三句话定位。}
+
+% ========================================================================
+\section{重缩放对称与守恒荷 \texorpdfstring{$C$}{C}}\label{sec:setup}
+% ========================================================================
+
+\subsection{一个由对称性给出的守恒量}\label{sec:setup:charge}
+在两层网络 $\hat y = \Wtwo\Wone x$ 中，对任意可逆矩阵 $G$ 作
+$\Wone \to G\Wone,\ \Wtwo \to \Wtwo G^{-1}$，乘积 $\Wtwo\Wone$ 不变，故损失 $L$ 不变。
+对应的守恒矩阵量为
+\begin{equation}\label{eq:Cdef}
+  \boxed{\ \Cmat = \Wone\Wone^\top - \Wtwo^\top\Wtwo.\ }
+\end{equation}
+
+\begin{Proposition}[梯度流下 $\Cmat$ 守恒；Du--Arora balancedness]\label{prop:conserved}
+% 成熟度：严格。
+$L$ 仅通过乘积 $P=\Wtwo\Wone$ 依赖参数，故
+$\partial L/\partial\Wone = \Wtwo^\top G_P,\ \partial L/\partial\Wtwo = G_P\Wone^\top$
+（$G_P=\partial L/\partial P$）。在梯度流 $\dot W_i = -\partial L/\partial W_i$ 下，
+\[
+  \dot\Cmat = \dot\Wone\Wone^\top + \Wone\dot\Wone^\top
+            - \dot\Wtwo^\top\Wtwo - \Wtwo^\top\dot\Wtwo = 0,
+\]
+四项两两相消。
+\end{Proposition}
+
+\begin{Remark}[诺特/moment map 旁白，不承重]
+$\Cmat$ 守恒就是命题~\ref{prop:conserved} 那行代数，不依赖拉格朗日量、作用量或平衡律。
+直觉上它对应“重缩放是损失的连续对称、对称对应守恒”（梯度流版诺特 / moment map），
+但本文不拿这层直觉当定理骨架。
+\end{Remark}
+
+\subsection{打破对称：weight decay 让 \texorpdfstring{$C$}{C} 衰减}\label{sec:setup:break}
+weight decay 给梯度加 $-\mu w$（等价于损失上加 $\tfrac{\mu}{2}\norm{w}^2$），这一项在重缩放下
+不不变，于是打破对称。代入梯度流直接算：
+\begin{equation}\label{eq:Cdecay}
+  \dot\Cmat = -2\mu\big(\Wone\Wone^\top - \Wtwo^\top\Wtwo\big) = -2\mu\,\Cmat
+  \quad\Longrightarrow\quad \Cmat(t)=\Cmat(0)\,e^{-2\mu t}.
+\end{equation}
+% 护栏1（再强调一次）：此式已见 Kunin 2021，引之，不当卖点。
+衰减率为 $2\mu$，纯一阶，无质量、无惯性、无平衡律。该式已见于既有工作~\citep{kunin2021neural}，
+此处作为本文的出发点而非贡献。toy model 实测拟合率 $0.6008\approx 2\mu$（\S\ref{sec:toy}）；
+并核实过速度阻尼 $-\mu\dot w$ \emph{不}让 $\Cmat$ 衰减，故衰减确由 weight decay 这一破坏对称的项造成。
+
+% ========================================================================
+\section{理想系统与三档层级}\label{sec:ladder}
+% ========================================================================
+
+\subsection{理想系统：损失为常数}\label{sec:ladder:flat}
+loss 处处平 $\Rightarrow$ 无梯度、无力 $\Rightarrow$ 所有诺特荷守恒，对称方向数 $=$ 参数全维 $N$。
+但正因如此，这种情况什么都学不到。由此立下贯穿全文的核心反转：
+\begin{quote}
+\textbf{完美的守恒 $=$ 完美的“没在学”。} 守恒不是学习的成就，而是学习的缺席。
+\end{quote}
+
+\subsection{三档理想化}\label{sec:ladder:three}
+\begin{table}[h]
+\centering
+\caption{从理想到现实的三档理想化层级。本文主战场是档二。}
+\label{tab:three-stages}
+\begin{tabular}{lllll}
+\toprule
+\textbf{档位} & \textbf{loss} & \textbf{正则/耗散} & \textbf{$\mu$} & \textbf{$\Cmat$ 行为} \\
+\midrule
+档一 & 常数（平） & 无 & --- & 守恒（不学） \\
+\textbf{档二（主战场）} & 有坡 & 各向同性 weight decay & 恒定 & 指数衰减，率 $2\mu$ \\
+档三 & 有坡 & 各向异性 $+$ 噪声 & 时变 & 起伏漂移（现实 SGD） \\
+\bottomrule
+\end{tabular}
+\end{table}
+现实 SGD 在档三，比档二多三样：噪声（minibatch）、各向异性（尤其配 Adam）、$\mu$ 时变
+（warmup、学习率衰减）。本文只在档二立定理，档三为推广方向，不可直接外推。
+
+% ========================================================================
+\section{主结果：从否定到正交分解}\label{sec:main}
+% ========================================================================
+% 这是 notes 的肉。骨架顺序：T1 → T2（否定）→ T7（how⊥what，高潮）。
+
+\begin{Theorem}[学习 $=$ 对称破缺，$\Cmat$ 衰减]\label{thm:break}
+% 成熟度：严格（纯一阶代数）。
+纯梯度流下 $\dot\Cmat=0$（对称未破，该方向是盲区，不学）；正则项打破对称后
+$\dot\Cmat=-2\mu\Cmat$，且 $\dot\Cmat=0 \iff$ 该方向不参与学习。
+\end{Theorem}
+
+\begin{Theorem}[否定定理：各向同性衰减率与任务无关]\label{thm:negative}
+% 成熟度：严格（解析即得）。这是 T7 的来源，要先立。
+在各向同性、恒定 weight decay 下 $\Cmat(t)=\Cmat(0)e^{-2\mu t}$，速率只由正则强度 $2\mu$ 决定，
+与任务、数据、所学内容无关。因此“衰减率”这一观测量本身不携带学习信息。
+\end{Theorem}
+
+\begin{Theorem}[正交分解：how $\perp$ what]\label{thm:orthogonal}
+% 成熟度：数值硬验证 + 结构性论证（参数流形对 GL 群商）。notes 的高潮。
+学习把参数自然分成两个正交部分：
+\[
+  \underbrace{\text{任务内容（what）}}_{\text{乘积 } \Wtwo\Wone \text{ 的奇异谱}}
+  \ \perp\
+  \underbrace{\text{内部组织（how）}}_{\text{诺特荷 } \Cmat}.
+\]
+诺特荷度量“以什么方式学的（how / 层间组织 / 规范自由度）”，与“学了什么任务（what）”
+正交、独立：两网络学同一任务可有不同诺特荷，学不同任务可有相同诺特荷。
+\end{Theorem}
+
+\paragraph{以否定结果立起 T7。}
+% 这是本文最有说服力的叙事结构，正文要写足。
+“用诺特荷衰减区分任务”这一尝试\emph{失败}了——换不同秩任务，整个诺特荷谱在 weight decay 下
+全部归零、与任务无关。而失败方式恰好证明了正交性：对照之下乘积 $\Wtwo\Wone$ 的奇异谱清楚地随
+任务秩变化（见 \S\ref{sec:toy}、图~\ref{fig:eight}）。任务信息（what）活在乘积谱里，
+诺特荷（how）与之正交。\textbf{TODO：补结构性论证——参数流形对 $GL$ 群商后，
+what 完全活在乘积里，$\Cmat$ 是沿对称轨道的坐标（moment map）。}
+
+\paragraph{任务信息只能从各向异性进入。}
+% T4，成熟度：示意/待严格化。是新意能否兑现的关键关。
+诺特荷的衰减要携带任务信息，当且仅当作用在对称方向上的力是\emph{各向异性}的
+（非欧度量或各向异性噪声）。各向同性力下衰减与任务正交（这正是定理~\ref{thm:negative} 的来源）；
+只有各向异性（自然梯度、Adam、各向异性噪声）才能让衰减谱携带任务信息。
+\textbf{TODO：这是档三的钥匙，需补定量实验（见 \S\ref{sec:outlook}）。}
+
+% ========================================================================
+\section{耗散层：相空间收缩与吸引子}\label{sec:dissipative}
+% ========================================================================
+\begin{Theorem}[相空间收缩到吸引子]\label{thm:contract}
+% 成熟度：示意 + 数值。
+学习（耗散）使参数相空间体积单调收缩，运动落到比参数维数更低的吸引子上
+（刘维尔定理的耗散版：保守=体积守恒，耗散=体积收缩）。
+\end{Theorem}
+
+\begin{Theorem}[收缩率 $=$ 诺特荷衰减率之和 $=$ 李雅普诺夫指数之和]\label{thm:rate}
+% 成熟度：toy model 硬验证（最硬一格）。
+三者相等。toy model 中 $\norm{\Cmat}\sim e^{-2\mu t}$（$\Cmat$ 是二次量，率 $2\mu$），
+数值与理论严格吻合（图~\ref{fig:eight}）。
+\end{Theorem}
+
+\begin{Remark}[展望：收缩率 $=$ 熵产生率]
+% T8，成熟度：展望，正文不展开。
+耗散系统收缩率 $=$ 熵产生率，学习可视作熵增的不可逆过程（学习的“热力学第二定律”）。列为展望。
+\end{Remark}
+
+% ========================================================================
+\section{两个核心不变量}\label{sec:invariants}
+% ========================================================================
+% 真正想推广的东西。明标为纲领/展望。是“能否升格为 research paper”的杠杆。
+依照庞加莱（拓扑不变量）、Morse（临界点指标）、耗散系统（吸引子维数）的共同特质——
+抓在不可解复杂性之上仍稳定、可分类的不变量，而非会被优化器锁死的速率——我们提炼两个量
+（\emph{此处为纲领/展望，非已证定理}）：
+\textbf{对称破缺数}（整数，拓扑不变量）：学习“激活”了多少个原本守恒（死）的方向 $=$ 学习深度；
+\textbf{吸引子维数}（维数不变量）：学习后系统实际活在几维 $=$ 有效维度。二者互补，且
+\begin{equation}\label{eq:invariants}
+  \text{对称破缺数} \;+\; \text{吸引子维数} \;\approx\; \text{参数总维数 } N.
+\end{equation}
+衰减率随系统复杂化乱变、不可推广；这两个整数/维数不变量有望从档二推广到档三。
+\textbf{TODO：给“对称破缺数”一个严格定义（如作用在对称方向上的力的有效秩 / Hessian 在
+规范方向的非零谱计数），并在档三实测其稳定性。}
+
+% ========================================================================
+\section{Toy Model 验证}\label{sec:toy}
+% ========================================================================
+% 统一模型：两层线性网。对应仓库脚本 eight_theorems.py / thm7_contrast.py / check_friction.py。
+全部结论用同一个两层线性网 $\hat y=\Wtwo\Wone x$、$\Cmat=\Wone\Wone^\top-\Wtwo^\top\Wtwo$ 展示。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{eight_theorems_toymodel.png}
+\caption{一个 toy model，逐条显示主要结论（$d_{\text{in}}=d_h=d_{\text{out}}=6$，
+自由度 $72$，诺特荷为 $6\times6$ 对称矩阵，对称方向上限 $21$）。}
+\label{fig:eight}
+\end{figure}
+
+% TODO：逐格写 T1 / T2 / T5+6 / T7 的数值小结。
+\paragraph{诚实的边界。}
+% 护栏3。
+\textbf{数值硬验证}：定理~\ref{thm:break}、\ref{thm:negative}、\ref{thm:rate}、\ref{thm:orthogonal}
+（其中 \ref{thm:rate} 与理论 $e^{-2\mu t}$ 严格吻合，最硬）。
+\textbf{示意/待严格化}：各向异性效应（在 toy model 中偏弱，但确随任务变）。
+\textbf{展望}：熵产生率、两个不变量在档三的稳定性。
+适用范围：以上在档二（各向同性、$\mu$ 恒定）严格成立；档三是推广方向，不可直接外推。
+
+% ========================================================================
+\section{结语与展望}\label{sec:outlook}
+% ========================================================================
+% TODO：把逻辑链串起来，并落到“两个不变量能否推广到档三”这一杠杆问题。
+
+\appendix
+% ========================================================================
+\section{一条没有走的路：二阶拉格朗日框架及我们为何放弃它}\label{app:roadnottaken}
+% ========================================================================
+% 护栏2。把博客那条（m / Q_N / 平衡律）诚实地收在这里，作为加分项。
+硬要给这套耗散套一件“力学”外壳是可以的：引入惯性 $m$、把训练写成二阶拉格朗日
+$L=\tfrac12 m\norm{\dot w}^2 - L_{\text{loss}}$，再用推广到耗散系统的诺特定理
+（平衡律 $dQ_N/dt=\langle F,\delta w\rangle$）去推，会引出一个带速度的动量荷
+$Q_N=m\langle\dot w,\delta w\rangle$、率写成 $\mu/m$。\textbf{我们放弃这条路}，因为：
+(i)~$Q_N$ 与 $\Cmat$ 是\emph{两个不同的荷}，率也对不上（$\mu/m$ vs $2\mu$）；
+(ii)~引入 $m$ 再取 $m\to0$ 退回一阶，是重构而非新结果；
+(iii)~耗散版诺特 $dQ_N/dt=-\lambda Q_N$ 已被标准阻尼系统处理覆盖~\citep{galley2013classical}。
+故 $m$、$Q_N$、平衡律一律不进正文，只此备注。
+
+% ========================================================================
+% 参考文献
+% ========================================================================
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}

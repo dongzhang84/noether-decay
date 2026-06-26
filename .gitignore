@@ -9,3 +9,19 @@
 # 编辑器临时文件
 *.swp
 *~
+
+# LaTeX 编译产物（源文件入库，产物不入库）
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.fls
+*.fdb_latexmk
+# 图由 build.sh 从 docs/ 自动拷入，不入库
+latex_*/eight_theorems_toymodel.png
+
+# 编译出的 PDF 也不入库（build.sh 可重建）
+*.pdf

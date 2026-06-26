@@ -1,0 +1,330 @@
+% Notes on Noether Charge Decay in Learning Dynamics, English version.
+% Build: pdflatex main -> bibtex main -> pdflatex main -> pdflatex main
+% Or: ./build.sh
+
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+\usepackage[margin=.9in]{geometry}
+\usepackage{amsmath, amssymb, amsfonts, amsthm, mathrsfs}
+\usepackage{array, enumerate}
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage[colorlinks=true, citecolor=blue, linkcolor=blue, urlcolor=blue,
+            hypertexnames=false]{hyperref}
+
+\newtheorem{Theorem}{Theorem}[section]
+\newtheorem{Definition}[Theorem]{Definition}
+\newtheorem{Proposition}[Theorem]{Proposition}
+\newtheorem{Assumption}[Theorem]{Assumption}
+\newtheorem{Lemma}[Theorem]{Lemma}
+\newtheorem{Corollary}[Theorem]{Corollary}
+\newtheorem{Remark}[Theorem]{Remark}
+\newtheorem{Example}[Theorem]{Example}
+
+\begin{document}
+
+\title{Notes on Noether Charge Decay in Learning Dynamics:\\
+       Learning as Symmetry Breaking}
+
+\author{Dong Zhang\thanks{\textbf{Email:} dongzhanghz@gmail.com}}
+\date{\today}
+\maketitle
+
+% --- paper-specific notation (kept in the body, preamble untouched) ------
+\newcommand{\Wone}{W_1}
+\newcommand{\Wtwo}{W_2}
+\newcommand{\Cmat}{C}
+\newcommand{\trace}{\operatorname{tr}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+
+% ============ WRITING GUARDRAILS (read before drafting; delete this block) ============
+%  Guardrail 1: related work MUST cite Du/Arora (balancedness conservation),
+%               Kunin 2021 *Neural Mechanics* (e^{-2*mu*t} under weight decay, Eq.20/App.G),
+%               Tanaka-Kunin 2021, Ziyin 2024. State the delta: this paper does NOT
+%               re-derive the mechanism; the contribution is the interpretive layer.
+%  Guardrail 2: second-order Lagrangian / mass m / momentum charge Q_N / balance law
+%               go into Appendix A "A road not taken", NOT the main skeleton.
+%  Guardrail 3: keep the maturity labels (rigorous / illustrative / aspirational) per item.
+% =====================================================================================
+
+\begin{abstract}
+\noindent
+% TODO: tighten before finalizing. This is the honest-positioning draft.
+We view the training of a deep network as a \textbf{dissipative dynamical system} and study the
+behavior, during learning, of the Noether charge $\Cmat = \Wone\Wone^\top - \Wtwo^\top\Wtwo$
+associated with the rescaling symmetry. Under pure gradient flow $\Cmat$ is conserved
+(Du--Arora balancedness); once weight decay breaks the symmetry, $\Cmat$ decays exponentially as
+$\dot\Cmat=-2\mu\Cmat$. This mechanism is already present in prior work (notably Kunin et al.'s
+\emph{Neural Mechanics}), and \textbf{is not the contribution of this paper}. Our thesis is one
+layer above it: \emph{a direction in which the charge is conserved is exactly a direction in which
+the network learns nothing.} We give two mutually reinforcing results. (i)~Under isotropic, constant
+weight decay the decay rate is set solely by the regularization strength and is \textbf{independent
+of the task} (a negative result), so the ``decay rate'' as an observable carries no learning
+information. (ii)~The charge measures \emph{how} the network organizes itself internally, which is
+\textbf{orthogonal} to \emph{what} task it learns (the singular spectrum of the product
+$\Wtwo\Wone$); this orthogonality is established through a negative experiment (the attempt to read
+the task off the charge fails, and the manner of failure is exactly what proves the orthogonality).
+We then describe learning as phase-space contraction onto a low-dimensional attractor, and distill
+two invariants meant to survive from the idealized regime to realistic SGD: a
+\textbf{symmetry-breaking number} (an integer) and an \textbf{attractor dimension}. Everything is
+demonstrated on one two-layer linear toy model, with explicit labeling of what is rigorous, what is
+illustrative, and what is still aspirational.
+\end{abstract}
+
+% \tableofcontents
+
+% ========================================================================
+\section{Introduction}\label{sec:intro}
+% ========================================================================
+% Purpose: state thesis + the conservation=blind-spot inversion + Guardrail 1 (boundary).
+
+The only stable conserved structure in learning comes from the reparameterization redundancy of the
+network. \textbf{TODO: prose.}
+
+\paragraph{Boundary with prior work (critical).}
+% Guardrail 1. Writing this paragraph immunizes the whole paper against "isn't this Kunin?".
+Neither the bare decay law $\Cmat(t)=\Cmat(0)e^{-2\mu t}$ nor balancedness conservation is new here:
+the former appears in Kunin et al.'s \emph{Neural Mechanics}~\citep{kunin2021neural} (which treats
+broken conservation as an instrument for tracking SGD trajectories), and the latter in
+Du et al.~\citep{du2018algorithmic} and Arora et al.~\citep{arora2018optimization}. Related are
+Tanaka--Kunin's Noether learning dynamics~\citep{tanaka2021noether} and Ziyin et al.'s noise
+equilibrium~\citep{ziyin2024parameter}. \textbf{We do not re-derive this mechanism}; the contribution
+is the interpretive/classification layer on top of it --- conservation as a learning blind spot,
+how$\perp$what, and ``the decay rate carries no learning information, hence the turn to discrete
+invariants.'' \textbf{TODO: 2--3 sentences of positioning.}
+
+% ========================================================================
+\section{Rescaling Symmetry and the Conserved Charge \texorpdfstring{$C$}{C}}\label{sec:setup}
+% ========================================================================
+
+\subsection{A conserved quantity from symmetry}\label{sec:setup:charge}
+For a two-layer network $\hat y = \Wtwo\Wone x$ and any invertible $G$, the change
+$\Wone \to G\Wone,\ \Wtwo \to \Wtwo G^{-1}$ leaves the product $\Wtwo\Wone$, hence the loss $L$,
+invariant. The corresponding conserved matrix quantity is
+\begin{equation}\label{eq:Cdef}
+  \boxed{\ \Cmat = \Wone\Wone^\top - \Wtwo^\top\Wtwo.\ }
+\end{equation}
+
+\begin{Proposition}[Conservation of $\Cmat$ under gradient flow; Du--Arora balancedness]\label{prop:conserved}
+% Maturity: rigorous.
+Since $L$ depends on the parameters only through $P=\Wtwo\Wone$, we have
+$\partial L/\partial\Wone = \Wtwo^\top G_P$ and $\partial L/\partial\Wtwo = G_P\Wone^\top$ with
+$G_P=\partial L/\partial P$. Under gradient flow $\dot W_i = -\partial L/\partial W_i$,
+\[
+  \dot\Cmat = \dot\Wone\Wone^\top + \Wone\dot\Wone^\top
+            - \dot\Wtwo^\top\Wtwo - \Wtwo^\top\dot\Wtwo = 0,
+\]
+the four terms cancelling pairwise.
+\end{Proposition}
+
+\begin{Remark}[Noether / moment-map aside, load-bearing nowhere]
+The conservation of $\Cmat$ is exactly the algebra of Proposition~\ref{prop:conserved}; it does not
+rely on a Lagrangian, an action, or a balance law. Intuitively it corresponds to ``rescaling is a
+continuous symmetry of the loss, and symmetry implies conservation'' (a gradient-flow Noether /
+moment map), but we do not build any theorem on that intuition.
+\end{Remark}
+
+\subsection{Breaking the symmetry: weight decay makes \texorpdfstring{$C$}{C} decay}\label{sec:setup:break}
+Weight decay adds $-\mu w$ to the gradient (equivalently $\tfrac{\mu}{2}\norm{w}^2$ to the loss),
+a term not invariant under rescaling. Substituting into the flow,
+\begin{equation}\label{eq:Cdecay}
+  \dot\Cmat = -2\mu\big(\Wone\Wone^\top - \Wtwo^\top\Wtwo\big) = -2\mu\,\Cmat
+  \quad\Longrightarrow\quad \Cmat(t)=\Cmat(0)\,e^{-2\mu t}.
+\end{equation}
+% Guardrail 1 (again): this is in Kunin 2021; cite, do not sell.
+The decay rate is $2\mu$, purely first order. This law already appears in prior
+work~\citep{kunin2021neural} and serves here as the starting point, not the contribution. The toy
+model fits a rate $0.6008\approx 2\mu$ (\S\ref{sec:toy}); we further verified that velocity damping
+$-\mu\dot w$ does \emph{not} make $\Cmat$ decay, so the decay is genuinely due to the
+symmetry-breaking weight-decay term.
+
+% ========================================================================
+\section{The Idealized System and a Three-Tier Ladder}\label{sec:ladder}
+% ========================================================================
+
+\subsection{The idealized system: constant loss}\label{sec:ladder:flat}
+A flat loss $\Rightarrow$ no gradient, no force $\Rightarrow$ all Noether charges conserved, with the
+number of symmetry directions equal to the full dimension $N$. But precisely for that reason nothing
+is learned. This gives the core inversion that runs through the paper:
+\begin{quote}
+\textbf{Perfect conservation $=$ perfect ``not learning''.} Conservation is not an achievement of
+learning but its absence.
+\end{quote}
+
+\subsection{Three tiers}\label{sec:ladder:three}
+\begin{table}[h]
+\centering
+\caption{A three-tier idealization from ideal to realistic. This paper's main arena is Tier~2.}
+\label{tab:three-stages}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Tier} & \textbf{Loss} & \textbf{Reg./dissipation} & \textbf{$\mu$} & \textbf{$\Cmat$ behavior} \\
+\midrule
+Tier 1 & constant (flat) & none & --- & conserved (no learning) \\
+\textbf{Tier 2 (main arena)} & sloped & isotropic weight decay & constant & exp.\ decay, rate $2\mu$ \\
+Tier 3 & sloped & anisotropic $+$ noise & time-varying & drift/fluctuation (real SGD) \\
+\bottomrule
+\end{tabular}
+\end{table}
+Real SGD sits at Tier~3, with three things Tier~2 lacks: noise (minibatching), anisotropy
+(especially with Adam), and time-varying $\mu$ (warmup, learning-rate decay). We establish theorems
+only at Tier~2; Tier~3 is a direction, not a result.
+
+% ========================================================================
+\section{Main Results: From a Negative Result to an Orthogonal Decomposition}\label{sec:main}
+% ========================================================================
+% The meat of the notes. Skeleton order: T1 -> T2 (negative) -> T7 (how perp what, climax).
+
+\begin{Theorem}[Learning $=$ symmetry breaking, $\Cmat$ decays]\label{thm:break}
+% Maturity: rigorous (first-order algebra).
+Under pure gradient flow $\dot\Cmat=0$ (symmetry unbroken; that direction is a blind spot, not
+learned); once a regularizer breaks the symmetry, $\dot\Cmat=-2\mu\Cmat$, and
+$\dot\Cmat=0 \iff$ that direction does not participate in learning.
+\end{Theorem}
+
+\begin{Theorem}[Negative result: the isotropic decay rate is task-independent]\label{thm:negative}
+% Maturity: rigorous (analytic). This is the source of T7; state it first.
+Under isotropic, constant weight decay, $\Cmat(t)=\Cmat(0)e^{-2\mu t}$, with a rate fixed solely by
+the regularization strength $2\mu$ and independent of task, data, or content. Hence the ``decay
+rate'' as an observable carries no learning information.
+\end{Theorem}
+
+\begin{Theorem}[Orthogonal decomposition: how $\perp$ what]\label{thm:orthogonal}
+% Maturity: hard numerical evidence + structural argument (quotient of param manifold by GL).
+Learning splits the parameters into two orthogonal parts:
+\[
+  \underbrace{\text{task content (what)}}_{\text{singular spectrum of } \Wtwo\Wone}
+  \ \perp\
+  \underbrace{\text{internal organization (how)}}_{\text{Noether charge } \Cmat}.
+\]
+The charge measures \emph{how} the network learned (internal cross-layer organization / gauge
+freedom), orthogonal to and independent of \emph{what} task it learned: two networks learning the
+same task can have different charges, and networks learning different tasks can have the same charge.
+\end{Theorem}
+
+\paragraph{Establishing the orthogonality through a negative result.}
+% The most persuasive narrative structure in the paper; write it out fully.
+The attempt to ``tell tasks apart from the charge decay'' \emph{fails}: across tasks of different
+rank, the entire Noether spectrum decays to zero under weight decay, independent of the task. The
+manner of failure is precisely what proves the orthogonality: by contrast, the singular spectrum of
+the product $\Wtwo\Wone$ varies clearly with task rank (\S\ref{sec:toy}, Fig.~\ref{fig:eight}). The
+task information (what) lives in the product spectrum; the charge (how) is orthogonal to it.
+\textbf{TODO: add the structural argument --- after quotienting the parameter manifold by $GL$, what
+lives entirely in the product, and $\Cmat$ is the coordinate along the symmetry orbit (moment map).}
+
+\paragraph{Task information can only enter through anisotropy.}
+% T4, maturity: illustrative / to be made rigorous. The make-or-break for the novelty.
+For the charge decay to carry task information, the force acting on the symmetry directions must be
+\emph{anisotropic} (a non-Euclidean metric or anisotropic noise). Under isotropic force the decay is
+orthogonal to the task (this is the source of Theorem~\ref{thm:negative}); only anisotropy (natural
+gradient, Adam, anisotropic noise) lets the decay spectrum carry task information.
+\textbf{TODO: this is the key to Tier~3; needs a quantitative experiment (\S\ref{sec:outlook}).}
+
+% ========================================================================
+\section{Dissipative Layer: Phase-Space Contraction and the Attractor}\label{sec:dissipative}
+% ========================================================================
+\begin{Theorem}[Contraction onto an attractor]\label{thm:contract}
+% Maturity: illustrative + numerical.
+Learning (dissipation) monotonically contracts the phase-space volume, and the motion settles onto
+an attractor of lower dimension than the parameter space (the dissipative version of Liouville's
+theorem: conservative $=$ volume preserved, dissipative $=$ volume contracts).
+\end{Theorem}
+
+\begin{Theorem}[Contraction rate $=$ sum of charge decay rates $=$ sum of Lyapunov exponents]\label{thm:rate}
+% Maturity: hard numerical verification (the hardest cell).
+The three are equal. In the toy model $\norm{\Cmat}\sim e^{-2\mu t}$ ($\Cmat$ is quadratic, rate
+$2\mu$), matching theory exactly (Fig.~\ref{fig:eight}).
+\end{Theorem}
+
+\begin{Remark}[Aspirational: contraction rate $=$ entropy production rate]
+% T8, maturity: aspirational, not developed in the main text.
+The contraction rate of a dissipative system equals its entropy production rate, so learning can be
+seen as an irreversible entropy-increasing process (a ``second law'' for learning). Listed as an
+outlook.
+\end{Remark}
+
+% ========================================================================
+\section{Two Core Invariants}\label{sec:invariants}
+% ========================================================================
+% What we actually want to generalize. Label as program/outlook. The lever for upgrading to a research paper.
+Following the shared trait of Poincar\'e (topological invariants), Morse (critical-point indices),
+and dissipative systems (attractor dimension) --- capture invariants that stay stable and
+classifiable above the unsolvable complexity, rather than rates the optimizer locks --- we distill
+two quantities (\emph{a program/outlook here, not a proven theorem}):
+the \textbf{symmetry-breaking number} (an integer, a topological invariant): how many originally
+conserved (dead) directions learning has ``activated'' $=$ the depth of learning; and the
+\textbf{attractor dimension} (a dimension invariant): how many dimensions the system actually lives
+in after learning $=$ the effective dimension. They are complementary, with
+\begin{equation}\label{eq:invariants}
+  \text{symmetry-breaking number} \;+\; \text{attractor dimension} \;\approx\; N.
+\end{equation}
+The decay rate fluctuates and does not generalize; these two integer/dimension invariants are meant
+to survive from Tier~2 to Tier~3. \textbf{TODO: give the symmetry-breaking number a rigorous
+definition (e.g.\ the effective rank of the force on the symmetry directions / the count of nonzero
+Hessian spectrum along gauge directions), and test its stability at Tier~3.}
+
+% ========================================================================
+\section{Toy Model Verification}\label{sec:toy}
+% ========================================================================
+% Unified model: two-layer linear net. Maps to repo scripts
+% eight_theorems.py / thm7_contrast.py / check_friction.py.
+All results are demonstrated on one two-layer linear net $\hat y=\Wtwo\Wone x$,
+$\Cmat=\Wone\Wone^\top-\Wtwo^\top\Wtwo$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{eight_theorems_toymodel.png}
+\caption{One toy model demonstrating the main results
+($d_{\text{in}}=d_h=d_{\text{out}}=6$, $72$ DOF, the charge a $6\times6$ symmetric matrix with at
+most $21$ symmetry directions).}
+\label{fig:eight}
+\end{figure}
+
+% TODO: write per-cell numerical summaries for T1 / T2 / T5+6 / T7.
+\paragraph{Honest boundary.}
+% Guardrail 3.
+\textbf{Hard numerical verification}: Theorems~\ref{thm:break}, \ref{thm:negative}, \ref{thm:rate},
+\ref{thm:orthogonal} (of which \ref{thm:rate} matches the theoretical $e^{-2\mu t}$ exactly, the
+hardest). \textbf{Illustrative / to be made rigorous}: the anisotropy effect (weak in the toy model,
+but it does vary with task). \textbf{Aspirational}: entropy production, and the stability of the two
+invariants at Tier~3. Scope: the above hold rigorously at Tier~2 (isotropic, constant $\mu$); Tier~3
+is a direction and must not be extrapolated to directly.
+
+% ========================================================================
+\section{Discussion and Outlook}\label{sec:outlook}
+% ========================================================================
+% TODO: stitch the logical chain together and land on the lever question:
+% can the two invariants be generalized to Tier 3?
+
+\appendix
+% ========================================================================
+\section{A Road Not Taken: the Second-Order Lagrangian Framing and Why We Drop It}\label{app:roadnottaken}
+% ========================================================================
+% Guardrail 2. The blog route (m / Q_N / balance law) is honestly retired here, as a strength.
+One can, if one insists, dress this dissipation in a ``mechanical'' shell: introduce an inertia $m$,
+write training as a second-order Lagrangian $L=\tfrac12 m\norm{\dot w}^2 - L_{\text{loss}}$, and
+apply a dissipative Noether theorem (balance law $dQ_N/dt=\langle F,\delta w\rangle$) to obtain a
+velocity-bearing momentum charge $Q_N=m\langle\dot w,\delta w\rangle$ with rate $\mu/m$.
+\textbf{We drop this route} because: (i)~$Q_N$ and $\Cmat$ are \emph{two different charges} with
+mismatched rates ($\mu/m$ vs $2\mu$); (ii)~introducing $m$ only to take $m\to0$ back to first order
+is a reconstruction, not a new result; (iii)~the dissipative Noether law $dQ_N/dt=-\lambda Q_N$ is
+already covered by standard treatments of damped systems~\citep{galley2013classical}. Hence $m$,
+$Q_N$, and the balance law are kept out of the main text and confined to this note.
+
+% ========================================================================
+% References
+% ========================================================================
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}
